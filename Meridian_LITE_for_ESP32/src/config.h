@@ -96,8 +96,8 @@
 /* 各種ハードウェアのマウント有無 */
 #define MOUNT_ESP32 1        // ESPの搭載 (0:なし-SPI通信およびUDP通信を実施しない, 1:あり)
 #define MOUNT_SD 0           // SDカードリーダーの有無 (0:なし, 1:あり)
-#define MOUNT_IMUAHRS 3      // IMU/AHRSの搭載状況 0:off, 1:MPU6050(GY-521), 2:MPU9250(GY-6050/GY-9250) 3:BNO055
-#define MOUNT_JOYPAD 2       // ジョイパッドの搭載
+#define MOUNT_IMUAHRS 0      // IMU/AHRSの搭載状況 0:off, 1:MPU6050(GY-521), 2:MPU9250(GY-6050/GY-9250) 3:BNO055
+#define MOUNT_JOYPAD 0       // ジョイパッドの搭載
                              // 0:なし, 1:SBDBT(未), 2:KRC-5FH, 3:PS3(未), 4:PS4(未) ,5:Wii_yoko,
                              // 6:Wii+Nun(未), 7:WiiPRO(未), 8:Xbox(未),
                              // 9:Merimote(未), 10:Retro
@@ -171,32 +171,32 @@ constexpr unsigned short PAD_WIIMOTE_ORIG[16] = {0x0100, 0x0200, 0x0400, 0x0800,
 //---- サ ー ボ 設 定  -----------------------------------------------------
 //-------------------------------------------------------------------------
 /* 各サーボのマウントありなし（1:サーボあり、0:サーボなし） */
-#define IDL_MT0 1  // 頭ヨー
+#define IDL_MT0 0  // 頭ヨー
 #define IDL_MT1 1  // 左肩ピッチ
-#define IDL_MT2 1  // 左肩ロール
-#define IDL_MT3 1  // 左肘ヨー
-#define IDL_MT4 1  // 左肘ピッチ
-#define IDL_MT5 1  // 左股ヨー
-#define IDL_MT6 1  // 左股ロール
-#define IDL_MT7 1  // 左股ピッチ
-#define IDL_MT8 1  // 左膝ピッチ
-#define IDL_MT9 1  // 左足首ピッチ
-#define IDL_MT10 1 // 左足首ロール
+#define IDL_MT2 0  // 左肩ロール
+#define IDL_MT3 0  // 左肘ヨー
+#define IDL_MT4 0  // 左肘ピッチ
+#define IDL_MT5 0  // 左股ヨー
+#define IDL_MT6 0  // 左股ロール
+#define IDL_MT7 0  // 左股ピッチ
+#define IDL_MT8 0  // 左膝ピッチ
+#define IDL_MT9 0  // 左足首ピッチ
+#define IDL_MT10 0 // 左足首ロール
 #define IDL_MT11 0 // 追加サーボ用
 #define IDL_MT12 0 // 追加サーボ用
 #define IDL_MT13 0 // 追加サーボ用
 #define IDL_MT14 0 // 追加サーボ用
-#define IDR_MT0 1  // 腰ヨー
-#define IDR_MT1 1  // 右肩ピッチ
-#define IDR_MT2 1  // 右肩ロール
-#define IDR_MT3 1  // 右肘ヨー
-#define IDR_MT4 1  // 右肘ピッチ
-#define IDR_MT5 1  // 右股ヨー
-#define IDR_MT6 1  // 右股ロール
-#define IDR_MT7 1  // 右股ピッチ
-#define IDR_MT8 1  // 右膝ピッチ
-#define IDR_MT9 1  // 右足首ピッチ
-#define IDR_MT10 1 // 右足首ロール
+#define IDR_MT0 0  // 腰ヨー
+#define IDR_MT1 0  // 右肩ピッチ
+#define IDR_MT2 0  // 右肩ロール
+#define IDR_MT3 0  // 右肘ヨー
+#define IDR_MT4 0  // 右肘ピッチ
+#define IDR_MT5 0  // 右股ヨー
+#define IDR_MT6 0  // 右股ロール
+#define IDR_MT7 0  // 右股ピッチ
+#define IDR_MT8 0  // 右膝ピッチ
+#define IDR_MT9 0  // 右足首ピッチ
+#define IDR_MT10 0 // 右足首ロール
 #define IDR_MT11 0 // 追加サーボ用
 #define IDR_MT12 0 // 追加サーボ用
 #define IDR_MT13 0 // 追加サーボ用

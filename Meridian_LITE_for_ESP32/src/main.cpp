@@ -70,17 +70,76 @@ MERIDIANFLOW::Meridian mrd;     // ライブラリのクラスを mrdという�
 #include <WiFi.h>               // WiFi通信用ライブラリ
 #include <WiFiUdp.h>            // UDP通信用ライブラリ
 WiFiUDP udp;                    // wifi設定
-#include <IcsHardSerialClass.h> // KONDOサーボのライブラリ
+//#include <IcsHardSerialClass.h> // KONDOサーボのライブラリ
 #include <Wire.h>               // I2C通信用ライブラリ
 #include <Adafruit_BNO055.h>    // 9軸センサBNO055用のライブラリ
 #include <ESP32Wiimote.h>       // Wiiコントローラーのライブラリ
 ESP32Wiimote wiimote;           // Wiiコントローラー設定
 #include <SPI.h>                // SPIのライブラリ
 #include <SD.h>                 // SDカード用のライブラリ
+#include <Dynamixel2Arduino.h>  // Dynamixelのライブラリ -- 2024/01/06 追加
+
+
+
+//---------------------------------------------------
+// DYNAMIXEL関連 --------------------
+//---------------------------------------------------
+
+#define DEBUG_SERIAL Serial
+#define DXL_SERIAL_L Serial1
+#define DXL_SERIAL_R Serial2
+const uint8_t DXL_DIR_PIN_L = 33; // DYNAMIXEL Shield DIR PIN
+const uint8_t DXL_DIR_PIN_R = 4;  // DYNAMIXEL Shield DIR PIN
+
+//Please see eManual Control Table section of your DYNAMIXEL.
+//This example is written based on DYNAMIXEL X series(excluding XL-320)
+#define ID_ADDR                 7
+#define ID_ADDR_LEN             1
+#define BAUDRATE_ADDR           8
+#define BAUDRATE_ADDR_LEN       1
+#define PROTOCOL_TYPE_ADDR      13
+#define PROTOCOL_TYPE_ADDR_LEN  1
+#define TIMEOUT 20    //default communication timeout 10ms
+#define OPERATING_MODE_ADDR         11
+#define OPERATING_MODE_ADDR_LEN     1
+#define TORQUE_ENABLE_ADDR          64
+#define TORQUE_ENABLE_ADDR_LEN      1
+#define LED_ADDR                    65
+#define LED_ADDR_LEN                1
+#define GOAL_POSITION_ADDR          116
+#define GOAL_POSITION_ADDR_LEN      4
+#define PRESENT_POSITION_ADDR       132
+#define PRESENT_POSITION_ADDR_LEN   4
+#define POSITION_CONTROL_MODE       3
+
+uint8_t turn_on = 1;
+uint8_t turn_off = 0;
+uint8_t returned_id = 0;
+uint8_t returned_baudrate = 0;
+uint8_t returned_protocol = 0;
+
+const float DXL_PROTOCOL_VERSION = 2.0;
+
+uint8_t operatingMode = POSITION_CONTROL_MODE;
+
+
+uint32_t goalPosition1;
+uint32_t presentPosition1;
+
+Dynamixel2Arduino dxl_L(DXL_SERIAL_L, DXL_DIR_PIN_L);
+Dynamixel2Arduino dxl_R(DXL_SERIAL_R, DXL_DIR_PIN_R);
+
+
+int dx_result;
+
+
+
 
 /* ICSサーボのインスタンス設定 */
-IcsHardSerialClass krs_L(&Serial1, PIN_EN_L, ICS_BAUDRATE, ICS_TIMEOUT); // サーボL系統UARTの設定（TX27,RX32,EN33）
-IcsHardSerialClass krs_R(&Serial2, PIN_EN_R, ICS_BAUDRATE, ICS_TIMEOUT); // サーボR系統UARTの設定（TX17,RX16,EN4）
+// IcsHardSerialClass krs_L(&Serial1, PIN_EN_L, ICS_BAUDRATE, ICS_TIMEOUT); // サーボL系統UARTの設定（TX27,RX32,EN33）
+// IcsHardSerialClass krs_R(&Serial2, PIN_EN_R, ICS_BAUDRATE, ICS_TIMEOUT); // サーボR系統UARTの設定（TX17,RX16,EN4）
+
+
 
 /* Meridim配列設定 */
 const int MSG_BUFF = MSG_SIZE * 2;     // Meridim配列のバイト長
@@ -164,12 +223,19 @@ int idl_cw[15] = {IDL_CW0, IDL_CW1, IDL_CW2, IDL_CW3, IDL_CW4, IDL_CW5, IDL_CW6,
 int idr_cw[15] = {IDR_CW0, IDR_CW1, IDR_CW2, IDR_CW3, IDR_CW4, IDR_CW5, IDR_CW6, IDR_CW7, IDR_CW8, IDR_CW9, IDR_CW10, IDR_CW11, IDR_CW12, IDR_CW13, IDR_CW14}; // R系統
 
 /* 各サーボの直立ポーズトリム値(degree) */
-float idl_trim[15] = {IDL_TRIM0, IDL_TRIM1, IDL_TRIM2, IDL_TRIM3, IDL_TRIM4, IDL_TRIM5, IDL_TRIM6, IDL_TRIM7, IDL_TRIM8, IDL_TRIM9, IDL_TRIM10, IDL_TRIM11, IDL_TRIM12, IDL_TRIM13, IDL_TRIM14}; // L系統
-float idr_trim[15] = {IDR_TRIM0, IDR_TRIM1, IDR_TRIM2, IDR_TRIM3, IDR_TRIM4, IDR_TRIM5, IDR_TRIM6, IDR_TRIM7, IDR_TRIM8, IDR_TRIM9, IDR_TRIM10, IDR_TRIM11, IDR_TRIM12, IDR_TRIM13, IDR_TRIM14}; // R系統
+// float idl_trim[15] = {IDL_TRIM0, IDL_TRIM1, IDL_TRIM2, IDL_TRIM3, IDL_TRIM4, IDL_TRIM5, IDL_TRIM6, IDL_TRIM7, IDL_TRIM8, IDL_TRIM9, IDL_TRIM10, IDL_TRIM11, IDL_TRIM12, IDL_TRIM13, IDL_TRIM14}; // L系統
+// float idr_trim[15] = {IDR_TRIM0, IDR_TRIM1, IDR_TRIM2, IDR_TRIM3, IDR_TRIM4, IDR_TRIM5, IDR_TRIM6, IDR_TRIM7, IDR_TRIM8, IDR_TRIM9, IDR_TRIM10, IDR_TRIM11, IDR_TRIM12, IDR_TRIM13, IDR_TRIM14}; // R系統
 
 /* サーボのポジション用配列 */
 int s_servo_pos_L[15] = {0}; // 15要素 100倍したdegree値
 int s_servo_pos_R[15] = {0}; // 15要素 100倍したdegree値
+
+
+// int s_DXL_servo_pos_L[] = {2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048}; //15要素
+// int s_DXL_servo_pos_R[] = {2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048}; //15要素
+// int r_DXL_servo_pos_L[] = {2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048}; //15要素
+// int r_DXL_servo_pos_R[] = {2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048, 2048}; //15要素
+
 
 /* 各サーボのポジション値(degree) */
 float idl_tgt[15] = {0};      // L系統の目標値
@@ -197,8 +263,15 @@ void setup()
   Serial.begin(SERIAL_PC_BPS);
 
   /* サーボモーター用シリアルの設定 */
-  krs_L.begin();
-  krs_R.begin();
+  // krs_L.begin();
+  // krs_R.begin();
+
+  // Dynamixelの設定
+  dxl_R.begin(1000000);
+  dxl_R.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+  dxl_L.begin(1000000);
+  dxl_L.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+
   delay(200);
 
   /* 起動メッセージ1 */
@@ -263,7 +336,40 @@ void setup()
     sendUDP();
     mrd.monitor_check_flow("[start]", MONITOR_FLOW);
   }
+
+
+
+  for (int i = 0; i < 15; i++) {
+    //dxl_L.torqueOff(i);
+    dx_result = dxl_L.setOperatingMode(i, OP_POSITION);
+    dx_result = dxl_L.torqueOn(i);
+
+    //dxl_R.torqueOff(i);
+    dx_result = dxl_R.setOperatingMode(i, OP_POSITION);
+    dx_result = dxl_R.torqueOn(i);
+    Serial.println("torque on"); //
+  }
+
+  //   // Set Goal Position in DEGREE value
+  // dx_result = dxl_R.setGoalPosition(1, 0, UNIT_DEGREE);
+  //   if(dx_result != 1) Serial.println("Dynamixel ERR.");
+  // dx_result = dxl_L.setGoalPosition(1, 0, UNIT_DEGREE);
+  //   if(dx_result != 1) Serial.println("Dynamixel ERR.");
+  // Serial.println("go position"); //
+
 }
+
+// ■ degreeをDynamixel値に変換 ----------------------------------------------------
+int Deg2Dxl(float degree) { //degreeにはidl_d[i] * idl_pn[i]、id_nにはidl_n[i]を入れる(左の場合は左半身系)
+  return (int)((degree * 4096 / 360) + 2048) ;
+}
+
+// ■ Dynamixelをdegree値に変換 -----------------------------------------------------
+float Dxl2Deg(int dxl) { //KRS値のほか idl_n[i], idl_pn[i] を入れる(右の場合はidr系)
+  float x = 1.0 * ((dxl - 2048) * 360) / 4096 ;
+  return x;
+}
+
 
 //================================================================================================================
 //---- M A I N  L O O P -----------------------------------------------------------------------------------------
@@ -346,10 +452,27 @@ void loop()
           {
             if (s_udp_meridim.sval[(i * 2) + 20] == 1) // 受信配列のサーボコマンドが1ならPos指定
             {
-              k = krs_L.setPos(i, mrd.Deg2Krs(idl_tgt[i], idl_trim[i], idl_cw[i]));
+              //k = krs_L.setPos(i, mrd.Deg2Krs(idl_tgt[i], idl_trim[i], idl_cw[i])); ★★★★★★★★★★★★★★★★★★★★★★
+
+              
+
+              // Turn on torque
+              if(dxl_L.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_on, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
+                DEBUG_SERIAL.println("Torque on");
+              else
+                DEBUG_SERIAL.println("Error: Torque on failed");
+
+              goalPosition1 = Deg2Dxl(idl_tgt[i]);
+              dxl_L.write(i, GOAL_POSITION_ADDR, (uint8_t*)&goalPosition1, GOAL_POSITION_ADDR_LEN, TIMEOUT);
+              dxl_L.read(i, PRESENT_POSITION_ADDR, PRESENT_POSITION_ADDR_LEN, (uint8_t*)&presentPosition1, sizeof(presentPosition1), TIMEOUT);
+              k = presentPosition1;
+
+
               if (k == -1) // サーボからの返信信号を受け取れなかった時は前回の数値のままにする
               {
-                k = mrd.Deg2Krs(idl_tgt_past[i], idl_trim[i], idl_cw[i]);
+                //k = mrd.Deg2Krs(idl_tgt_past[i], idl_trim[i], idl_cw[i]);
+                k = Deg2Dxl(idl_tgt_past[i]);
+
                 idl_err[i]++;
                 if (idl_err[i] >= SERVO_LOST_ERROR_WAIT)
                 {
@@ -364,10 +487,22 @@ void loop()
             }
             else // 1以外ならとりあえずサーボを脱力し位置を取得。手持ちの最大は15
             {
-              k = krs_L.setFree(i); // サーボからの返信信号を受け取れていれば値を更新
+              //k = krs_L.setFree(i); // サーボからの返信信号を受け取れていれば値を更新★★★★★★★★★★★★★★★★★★★★★
+              
+              // Turn off torque
+              if(dxl_L.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_off, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
+                DEBUG_SERIAL.println("Torque on");
+              else
+                DEBUG_SERIAL.println("Error: Torque on failed");
+
+              dxl_L.read(i, PRESENT_POSITION_ADDR, PRESENT_POSITION_ADDR_LEN, (uint8_t*)&presentPosition1, sizeof(presentPosition1), TIMEOUT);
+              k = presentPosition1;
+
               if (k == -1)          // サーボからの返信信号を受け取れなかった時は前回の数値のままにする
               {
-                k = mrd.Deg2Krs(idl_tgt_past[i], idl_trim[i], idl_cw[i]);
+                //k = mrd.Deg2Krs(idl_tgt_past[i], idl_trim[i], idl_cw[i]);
+                k = Deg2Dxl(idl_tgt_past[i]);
+                
                 idl_err[i]++;
                 if (idl_err[i] >= SERVO_LOST_ERROR_WAIT)
                 {
@@ -380,7 +515,8 @@ void loop()
                 idl_err[i] = 0;
               }
             }
-            idl_tgt[i] = mrd.Krs2Deg(k, idl_trim[i], idl_cw[i]);
+            //idl_tgt[i] = mrd.Krs2Deg(k, idl_trim[i], idl_cw[i]);
+            idl_tgt[i] = Dxl2Deg(k);
           }
           delayMicroseconds(1);
 
@@ -388,10 +524,24 @@ void loop()
           {
             if (s_udp_meridim.sval[(i * 2) + 50] == 1) // 受信配列のサーボコマンドが1ならPos指定
             {
-              k = krs_R.setPos(i, mrd.Deg2Krs(idr_tgt[i], idr_trim[i], idr_cw[i]));
+              //k = krs_R.setPos(i, mrd.Deg2Krs(idr_tgt[i], idr_trim[i], idr_cw[i]));★★★★★★★★★★★★★★★
+
+              // Turn on torque
+              if(dxl_R.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_on, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
+                DEBUG_SERIAL.println("Torque on");
+              else
+                DEBUG_SERIAL.println("Error: Torque on failed");
+
+              //goalPosition1 = s_DXL_servo_pos_R[i];
+              goalPosition1 = Deg2Dxl(idl_tgt[i]);
+              dxl_R.write(i, GOAL_POSITION_ADDR, (uint8_t*)&goalPosition1, GOAL_POSITION_ADDR_LEN, TIMEOUT);
+              dxl_R.read(i, PRESENT_POSITION_ADDR, PRESENT_POSITION_ADDR_LEN, (uint8_t*)&presentPosition1, sizeof(presentPosition1), TIMEOUT);
+              k = presentPosition1;
+
               if (k == -1) // サーボからの返信信号を受け取れなかった時は前回の数値のままにする
               {
-                k = mrd.Deg2Krs(idr_tgt_past[i], idr_trim[i], idr_cw[i]);
+                //k = mrd.Deg2Krs(idr_tgt_past[i], idr_trim[i], idr_cw[i]);
+                k = Deg2Dxl(idl_tgt_past[i]);
                 idr_err[i]++;
                 if (idr_err[i] >= SERVO_LOST_ERROR_WAIT)
                 {
@@ -406,10 +556,23 @@ void loop()
             }
             else // 1以外ならとりあえずサーボを脱力し位置を取得
             {
-              k = krs_R.setFree(i);
+              //k = krs_R.setFree(i);★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+              // Turn off torque
+              if(dxl_R.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_off, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
+                DEBUG_SERIAL.println("Torque on");
+              else
+                DEBUG_SERIAL.println("Error: Torque on failed");
+
+              dxl_R.read(i, PRESENT_POSITION_ADDR, PRESENT_POSITION_ADDR_LEN, (uint8_t*)&presentPosition1, sizeof(presentPosition1), TIMEOUT);
+              k = presentPosition1;
+
+
               if (k == -1) // サーボからの返信信号を受け取れなかった時は前回の数値のままにする
               {
-                k = mrd.Deg2Krs(idr_tgt_past[i], idr_trim[i], idr_cw[i]);
+                //k = mrd.Deg2Krs(idr_tgt_past[i], idr_trim[i], idr_cw[i]);
+                k = Deg2Dxl(idr_tgt_past[i]);
+                
                 idr_err[i]++;
                 if (idr_err[i] >= SERVO_LOST_ERROR_WAIT)
                 {
@@ -422,7 +585,8 @@ void loop()
                 idr_err[i] = 0;
               }
             }
-            idr_tgt[i] = mrd.Krs2Deg(k, idr_trim[i], idr_cw[i]);
+            //idr_tgt[i] = mrd.Krs2Deg(k, idr_trim[i], idr_cw[i]);
+            idl_tgt[i] = Dxl2Deg(k);
           }
           delayMicroseconds(1);
         }
@@ -656,92 +820,93 @@ void bt_settings()
 
 uint64_t joypad_read(int mount_joypad, uint64_t pre_val, int polling, bool joypad_reflesh)
 {
-  if (mount_joypad == 2)
-  { // KRR5FH(KRC-5FH)をICS_R系に接続している場合
-    joypad_polling_count++;
-    if (joypad_polling_count >= polling)
-    {
-      static bool isFirstCall = true; // 初回の呼び出しフラグ
-      if (isFirstCall)
-      {
-        Serial.println("KRC-5FH successfully connected. ");
-        isFirstCall = false; // 初回の呼び出しフラグをオフにする
-      }
-      unsigned short buttonData;
-      unsigned short pad_btn_tmp = 0;
+  // if (mount_joypad == 2)
+  // { // KRR5FH(KRC-5FH)をICS_R系に接続している場合
+  //   joypad_polling_count++;
+  //   if (joypad_polling_count >= polling)
+  //   {
+  //     static bool isFirstCall = true; // 初回の呼び出しフラグ
+  //     if (isFirstCall)
+  //     {
+  //       Serial.println("KRC-5FH successfully connected. ");
+  //       isFirstCall = false; // 初回の呼び出しフラグをオフにする
+  //     }
+  //     unsigned short buttonData;
+  //     unsigned short pad_btn_tmp = 0;
 
-      buttonData = krs_R.getKrrButton();
-      delayMicroseconds(2);
-      if (buttonData != KRR_BUTTON_FALSE) // ボタンデータが受信できていたら
-      {
-        int button_1 = buttonData;
+  //     // buttonData = krs_R.getKrrButton(); ★★★★★★★★★★★★★★★★★★★★★★★
+  //     delayMicroseconds(2);
+  //     if (buttonData != KRR_BUTTON_FALSE) // ボタンデータが受信できていたら
+  //     {
+  //       int button_1 = buttonData;
 
-        if (JOYPAD_GENERALIZE)
-        {
+  //       if (JOYPAD_GENERALIZE)
+  //       {
 
-          if ((button_1 & 15) == 15)
-          { // 左側十字ボタン全部押しなら start押下とみなす
-            pad_btn_tmp += 1;
-          }
-          else
-          {
-            // 左側の十字ボタン
-            pad_btn_tmp += (button_1 & 1) * 16 + ((button_1 & 2) >> 1) * 64 + ((button_1 & 4) >> 2) * 32 + ((button_1 & 8) >> 3) * 128;
-          }
-          if ((button_1 & 368) == 368)
-            pad_btn_tmp += 8; // 右側十字ボタン全部押しなら select押下とみなす
-          else
-          {
-            // 右側十字ボタン
-            pad_btn_tmp += ((button_1 & 16) >> 4) * 4096 + ((button_1 & 32) >> 5) * 16384 + ((button_1 & 64) >> 6) * 8192 + ((button_1 & 256) >> 8) * 32768;
-          }
-          // L1,L2,R1,R2
-          pad_btn_tmp += ((button_1 & 2048) >> 11) * 2048 + ((button_1 & 4096) >> 12) * 512 + ((button_1 & 512) >> 9) * 1024 + ((button_1 & 1024) >> 10) * 256;
-        }
-        else
-        {
-          pad_btn_tmp = button_1;
-        }
-      }
-      /* 共用体用の64ビットの上位16ビット部をボタンデータとして書き換える */
-      uint64_t updated_val;
-      if (joypad_reflesh)
-      {
-        updated_val = (pre_val & 0xFFFFFFFFFFFF0000) | (static_cast<uint64_t>(pad_btn_tmp)); // 上位16ビット index[0]
-      }
-      else
-      {
-        updated_val = (pre_val) | (static_cast<uint64_t>(pad_btn_tmp));
-      }
-      // updated_val = (updated_val & 0x0000FFFFFFFFFFFF) | (static_cast<uint64_t>(pad_btn_tmp) << 48); // 下位16ビット index[3]
-      // updated_val = (updated_val & 0xFFFF0000FFFFFFFF) | (static_cast<uint64_t>(pad_btn_tmp) << 32); // 上位33-48ビット index[2]
-      // updated_val = (updated_val & 0xFFFFFFFF0000FFFF) | (static_cast<uint64_t>(pad_btn_tmp) << 16); // 上位17-32ビット index[1]
-      joypad_polling_count = 0;
-      return updated_val;
-    }
-    else
-    {
-      return pre_val;
-    }
-  }
-  else if (mount_joypad == 5) // wiimote_yoko
-  {
-    uint64_t updated_val = 0;
-    if (joypad_reflesh)
-    {
-      updated_val = (pre_val & 0xFFFFFFFFFFFF0000) | (static_cast<uint64_t>(pad_wiimote_receive())); // 上位16ビット index[0]
-    }
-    else
-    {
-      updated_val = (pre_val) | (static_cast<uint64_t>(pad_wiimote_receive()));
-    }
-    joypad_polling_count = 0;
-    return updated_val;
-  }
-  else
-  {
-    return pre_val;
-  }
+  //         if ((button_1 & 15) == 15)
+  //         { // 左側十字ボタン全部押しなら start押下とみなす
+  //           pad_btn_tmp += 1;
+  //         }
+  //         else
+  //         {
+  //           // 左側の十字ボタン
+  //           pad_btn_tmp += (button_1 & 1) * 16 + ((button_1 & 2) >> 1) * 64 + ((button_1 & 4) >> 2) * 32 + ((button_1 & 8) >> 3) * 128;
+  //         }
+  //         if ((button_1 & 368) == 368)
+  //           pad_btn_tmp += 8; // 右側十字ボタン全部押しなら select押下とみなす
+  //         else
+  //         {
+  //           // 右側十字ボタン
+  //           pad_btn_tmp += ((button_1 & 16) >> 4) * 4096 + ((button_1 & 32) >> 5) * 16384 + ((button_1 & 64) >> 6) * 8192 + ((button_1 & 256) >> 8) * 32768;
+  //         }
+  //         // L1,L2,R1,R2
+  //         pad_btn_tmp += ((button_1 & 2048) >> 11) * 2048 + ((button_1 & 4096) >> 12) * 512 + ((button_1 & 512) >> 9) * 1024 + ((button_1 & 1024) >> 10) * 256;
+  //       }
+  //       else
+  //       {
+  //         pad_btn_tmp = button_1;
+  //       }
+  //     }
+  //     /* 共用体用の64ビットの上位16ビット部をボタンデータとして書き換える */
+  //     uint64_t updated_val;
+  //     if (joypad_reflesh)
+  //     {
+  //       updated_val = (pre_val & 0xFFFFFFFFFFFF0000) | (static_cast<uint64_t>(pad_btn_tmp)); // 上位16ビット index[0]
+  //     }
+  //     else
+  //     {
+  //       updated_val = (pre_val) | (static_cast<uint64_t>(pad_btn_tmp));
+  //     }
+  //     // updated_val = (updated_val & 0x0000FFFFFFFFFFFF) | (static_cast<uint64_t>(pad_btn_tmp) << 48); // 下位16ビット index[3]
+  //     // updated_val = (updated_val & 0xFFFF0000FFFFFFFF) | (static_cast<uint64_t>(pad_btn_tmp) << 32); // 上位33-48ビット index[2]
+  //     // updated_val = (updated_val & 0xFFFFFFFF0000FFFF) | (static_cast<uint64_t>(pad_btn_tmp) << 16); // 上位17-32ビット index[1]
+  //     joypad_polling_count = 0;
+  //     return updated_val;
+  //   }
+  //   else
+  //   {
+  //     return pre_val;
+  //   }
+  // }
+  // else if (mount_joypad == 5) // wiimote_yoko
+  // {
+  //   uint64_t updated_val = 0;
+  //   if (joypad_reflesh)
+  //   {
+  //     updated_val = (pre_val & 0xFFFFFFFFFFFF0000) | (static_cast<uint64_t>(pad_wiimote_receive())); // 上位16ビット index[0]
+  //   }
+  //   else
+  //   {
+  //     updated_val = (pre_val) | (static_cast<uint64_t>(pad_wiimote_receive()));
+  //   }
+  //   joypad_polling_count = 0;
+  //   return updated_val;
+  // }
+  // else
+  // {
+  //   return pre_val;
+  // }
+  return 0;
 }
 
 uint16_t pad_wiimote_receive()
@@ -918,11 +1083,21 @@ void servo_all_off()
     {
       if (idl_mount[i] == 1)
       {
-        krs_L.setFree(i);
+        // krs_L.setFree(i);★★★★★★★★★★★★★★★★★★★★★
+                // Turn off torque
+        if(dxl_L.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_off, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
+          DEBUG_SERIAL.println("Torque off");
+        else
+          DEBUG_SERIAL.println("Error: Torque off failed");
       }
       if (idr_mount[i] == 1)
       {
-        krs_R.setFree(i);
+        // krs_R.setFree(i); ★★★★★★★★★★★★★★★★★★★★★★★★★
+                // Turn off torque
+        if(dxl_R.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_off, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
+          DEBUG_SERIAL.println("Torque off");
+        else
+          DEBUG_SERIAL.println("Error: Torque off failed");
       }
       delayMicroseconds(2);
     }
