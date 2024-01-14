@@ -1,3 +1,15 @@
+# Meridian_LITE 有線対応＆Dynamixel対応版
+
+こちらのリポジトリは、Meridian_LITE v1.0.1をベースに下記の点に変更が加えられています。
+
+- WiFiから有線に変更
+- KONDOサーボからDynamixelに変更
+
+ブログの方にも少し解説を載せました  
+https://dream-drive.net/2024/01/14/17486/
+
+
+みっちー Twitter : Dream_Drive
 
 # Meridian_LITE v1.0.1
 

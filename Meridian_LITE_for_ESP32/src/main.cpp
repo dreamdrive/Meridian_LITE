@@ -67,22 +67,36 @@
 #include <Arduino.h>
 #include <Meridian.h>           // Meridianのライブラリ導入
 MERIDIANFLOW::Meridian mrd;     // ライブラリのクラスを mrdという名前でインスタンス化
-#include <WiFi.h>               // WiFi通信用ライブラリ
-#include <WiFiUdp.h>            // UDP通信用ライブラリ
-WiFiUDP udp;                    // wifi設定
-//#include <IcsHardSerialClass.h> // KONDOサーボのライブラリ
+//#include <WiFi.h>               // WiFi通信用ライブラリ      -- 2024/01/14 コメントアウト WIFIから有線LANへ
+//#include <WiFiUdp.h>            // UDP通信用ライブラリ       -- 2024/01/14 コメントアウト WIFIから有線LANへ
+//WiFiUDP udp;                    // wifi設定                  -- 2024/01/14 コメントアウト WIFIから有線LANへ
+//#include <IcsHardSerialClass.h> // KONDOサーボのライブラリ    -- 2024/01/06 コメントアウト KONDOからROBOTISへ
 #include <Wire.h>               // I2C通信用ライブラリ
 #include <Adafruit_BNO055.h>    // 9軸センサBNO055用のライブラリ
 #include <ESP32Wiimote.h>       // Wiiコントローラーのライブラリ
 ESP32Wiimote wiimote;           // Wiiコントローラー設定
 #include <SPI.h>                // SPIのライブラリ
 #include <SD.h>                 // SDカード用のライブラリ
+
 #include <Dynamixel2Arduino.h>  // Dynamixelのライブラリ -- 2024/01/06 追加
+#include <Ethernet2.h>          // 有線LANの追加(SPI接続) -- 2024/01/14 追加
+                                // MeridianのSPIがSPI3との接続のため、w5500.cppとw5500.hも一部修正(begin関数とCSピンの定義について)
+#include <EthernetUDP2.h>       // 有線LANの追加(SPI接続) -- 2024/01/14 追加
+EthernetUDP udp;                // 有線LANの追加(SPI接続) -- 2024/01/14 追加
 
+// 自局MACアドレスと自局IPアドレス (有線LAN)----------------------------------
+// 現時点では、key.hのFIXED_IP_ADDRよりこちらが優先されてしまう。
+byte mac[] = {
+  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
+};
+IPAddress ip(192, 168, 7, 107);
 
+// 送信先IPは、key.hのWIFI_SEND_IPに記載してください。
+
+// 自局MACアドレスと自局IPアドレス (有線LAN)----------------------------------
 
 //---------------------------------------------------
-// DYNAMIXEL関連 --------------------
+//                   DYNAMIXEL関連 
 //---------------------------------------------------
 
 #define DEBUG_SERIAL Serial
@@ -122,24 +136,21 @@ const float DXL_PROTOCOL_VERSION = 2.0;
 
 uint8_t operatingMode = POSITION_CONTROL_MODE;
 
-
 uint32_t goalPosition1;
 uint32_t presentPosition1;
 
 Dynamixel2Arduino dxl_L(DXL_SERIAL_L, DXL_DIR_PIN_L);
 Dynamixel2Arduino dxl_R(DXL_SERIAL_R, DXL_DIR_PIN_R);
 
-
 int dx_result;
 
-
-
+//---------------------------------------------------
+//       ↑↑↑↑↑↑      DYNAMIXEL関連　　　　 ↑↑↑↑↑↑
+//---------------------------------------------------
 
 /* ICSサーボのインスタンス設定 */
 // IcsHardSerialClass krs_L(&Serial1, PIN_EN_L, ICS_BAUDRATE, ICS_TIMEOUT); // サーボL系統UARTの設定（TX27,RX32,EN33）
 // IcsHardSerialClass krs_R(&Serial2, PIN_EN_R, ICS_BAUDRATE, ICS_TIMEOUT); // サーボR系統UARTの設定（TX17,RX16,EN4）
-
-
 
 /* Meridim配列設定 */
 const int MSG_BUFF = MSG_SIZE * 2;     // Meridim配列のバイト長
@@ -278,14 +289,17 @@ void setup()
   mrd.print_esp_hello_start(VERSION, String(SERIAL_PC_BPS), WIFI_AP_SSID);
 
   /* WiFiの初期化と開始 */
-  init_wifi(WIFI_AP_SSID, WIFI_AP_PASS);
-  while (WiFi.status() != WL_CONNECTED)
-  {           // https://www.arduino.cc/en/Reference/WiFiStatus 戻り値一覧
-    delay(1); // 接続が完了するまでループで待つ
-  }
+  // init_wifi(WIFI_AP_SSID, WIFI_AP_PASS);
+  // while (WiFi.status() != WL_CONNECTED)
+  // {           // https://www.arduino.cc/en/Reference/WiFiStatus 戻り値一覧
+  //   delay(1); // 接続が完了するまでループで待つ
+  // }
+
+  Ethernet.begin(mac, ip);
 
   /* 起動メッセージ2 */
-  mrd.print_esp_hello_ip(WIFI_SEND_IP, WiFi.localIP().toString(), FIXED_IP_ADDR, MODE_FIXED_IP);
+  //mrd.print_esp_hello_ip(WIFI_SEND_IP, WiFi.localIP().toString(), FIXED_IP_ADDR, MODE_FIXED_IP);
+  mrd.print_esp_hello_ip(WIFI_SEND_IP, Ethernet.localIP().toString(), FIXED_IP_ADDR, MODE_FIXED_IP);
 
   /* UDP通信の開始 */
   udp.begin(UDP_RESV_PORT);
@@ -454,7 +468,8 @@ void loop()
             {
               //k = krs_L.setPos(i, mrd.Deg2Krs(idl_tgt[i], idl_trim[i], idl_cw[i])); ★★★★★★★★★★★★★★★★★★★★★★
 
-              
+              DEBUG_SERIAL.print("Sending :");
+              DEBUG_SERIAL.println(i);
 
               // Turn on torque
               if(dxl_L.write(i, TORQUE_ENABLE_ADDR, (uint8_t*)&turn_on, TORQUE_ENABLE_ADDR_LEN, TIMEOUT))
@@ -714,16 +729,16 @@ void loop()
 //---- 関 数 各 種  -----------------------------------------------------------------------------------------------
 //================================================================================================================
 
-void init_wifi(const char *wifi_ap_ssid, const char *wifi_ap_pass)
-{
-  WiFi.disconnect(true, true); // WiFi接続をリセット
-  delay(100);
-  WiFi.begin(wifi_ap_ssid, wifi_ap_pass); // Wifiに接続
-  while (WiFi.status() != WL_CONNECTED)
-  {            // https://www.arduino.cc/en/Reference/WiFiStatus 戻り値一覧
-    delay(50); // 接続が完了するまでループで待つ
-  }
-}
+// void init_wifi(const char *wifi_ap_ssid, const char *wifi_ap_pass)
+// {
+//   WiFi.disconnect(true, true); // WiFi接続をリセット
+//   delay(100);
+//   WiFi.begin(wifi_ap_ssid, wifi_ap_pass); // Wifiに接続
+//   while (WiFi.status() != WL_CONNECTED)
+//   {            // https://www.arduino.cc/en/Reference/WiFiStatus 戻り値一覧
+//     delay(50); // 接続が完了するまでループで待つ
+//   }
+// }
 
 void receiveUDP()
 {
